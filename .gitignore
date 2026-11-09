@@ -1,0 +1,69 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Stembox patch workspace — ignore rules
+#
+# This repository is ONLY the patch toolkit for Stembox:
+#   /apply_patches.py  the single toolkit: patch / keys / mint / install / status
+#   /patch.md          technical documentation
+#   /README.md         usage notes
+#   /build/            ALL intermediate artifacts (git-ignored, disposable)
+#
+# /source/ is a SEPARATE project (the open-source reimplementation, "ostem").
+# It is intentionally ignored here: versioned on its own, not part of this repo.
+#
+# Everything under build/ is reproducible:
+#   build/app-pristine/  vendor DMG contents (re-download; see patch.md §5)
+#   build/app-patched/   patched + signed output of `apply_patches.py patch`
+#   build/keys/          our Ed25519 keypair (PRIVATE KEY — never commit)
+#   build/models/        separation weights (~460MB)
+#   build/downloads/     vendor DMGs
+#   build/cmake/         cmake -S source -B build/cmake
+#   build/venv/          python -m venv build/venv
+# ─────────────────────────────────────────────────────────────────────────────
+
+# the independent ostem reimplementation project (tracked elsewhere)
+source/
+
+# build tree (intermediates, incl. the private key)
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# CMake / native
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+compile_commands.json
+
+# downloaded / generated model weights (huge, reproducible)
+*.onnx
+
+# macOS
+.DS_Store
+*.swp
+
+# secrets: never commit key material or tokens (they live under build/ anyway)
+*.hex
+keys.json
+token_*.txt
+*_token*.txt
+
+# editors
+.idea/
+.vscode/
