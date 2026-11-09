@@ -262,6 +262,24 @@ def cmd_patch(args) -> int:
     return patch_binary(binary, keys["pub_spki_b64"], args.verify_only)
 
 
+def sign_bundle(app_dir: str) -> None:
+    """Ad-hoc sign the whole bundle.
+
+    Signs the BUNDLE (not just the main binary) with --deep: a freshly
+    copied vendor app contains nested helper binaries and resource bundles
+    that must all be re-signed, otherwise codesign refuses with
+    "code object is not signed at all".
+
+    NOTE: deliberately WITHOUT --options runtime — hardened runtime turns on
+    library validation, which then rejects the ad-hoc-signed Qt frameworks
+    ("mapping process and mapped file have different Team IDs").
+    """
+    subprocess.run(["codesign", "--force", "--deep", "--sign", "-", app_dir],
+                   check=True)
+    subprocess.run(["codesign", "--verify", "--deep", "--strict", app_dir],
+                   check=True)
+
+
 def cmd_install_app(args) -> int:
     """patch + ad-hoc sign + deploy to /Applications + install token."""
     keys = load_keys()
@@ -269,8 +287,8 @@ def cmd_install_app(args) -> int:
     rc = patch_binary(patched_bin, keys["pub_spki_b64"], False)
     if rc != 0:
         return rc
-    print("\n-- re-signing (no --options runtime: disables library validation)")
-    subprocess.run(["codesign", "--force", "--sign", "-", patched_bin], check=True)
+    print("\n-- re-signing bundle (ad-hoc, no --options runtime)")
+    sign_bundle(APP_PATCHED)
     print("\n-- deploying to", INSTALL_DIR)
     if os.path.isdir(INSTALL_DIR):
         shutil.rmtree(INSTALL_DIR)
@@ -354,9 +372,8 @@ def cmd_bootstrap(args) -> int:
     rc = patch_binary(os.path.join(APP_PATCHED, BIN_REL), keys["pub_spki_b64"], False)
     if rc != 0:
         return rc
-    subprocess.run(["codesign", "--force", "--sign", "-",
-                    os.path.join(APP_PATCHED, BIN_REL)], check=True)
-    print("-- ad-hoc signed (no --options runtime)")
+    print("-- ad-hoc signing bundle (no --options runtime)")
+    sign_bundle(APP_PATCHED)
     return cmd_install_app(args)
 
 
