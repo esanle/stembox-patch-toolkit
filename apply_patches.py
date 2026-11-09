@@ -304,7 +304,7 @@ def cmd_bootstrap(args) -> int:
     if not os.path.isfile(dmg):
         print(f"-- downloading {url}")
         subprocess.run(["curl", "-fL", "-o", dmg, url], check=True)
-    print(f"   dmg: {os.path.name(dmg)} ({os.path.getsize(dmg)} bytes)")
+    print(f"   dmg: {os.path.basename(dmg)} ({os.path.getsize(dmg)} bytes)")
 
     print("-- mounting dmg")
     mount = subprocess.run(
