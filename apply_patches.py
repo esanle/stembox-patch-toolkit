@@ -285,6 +285,81 @@ def cmd_install_app(args) -> int:
     return 0
 
 
+def cmd_bootstrap(args) -> int:
+    """One-shot setup on a fresh machine: fetch the official app, generate
+    keys, patch, sign, deploy, install a token for THIS machine.
+
+    Works from a bare clone (no build/ contents). Steps:
+      1. download the vendor DMG for the requested version
+      2. mount it and copy Stembox.app -> build/app-pristine
+      3. generate our keypair (build/keys/keys.json)
+      4. copy pristine -> build/app-patched and apply the patches
+      5. ad-hoc sign, deploy to /Applications, install a local token
+    """
+    ver = args.version
+    url = (f"https://stemboxdj.com/downloads/Stembox-{ver}-arm64.dmg")
+    dmg = os.path.join(BUILD, "downloads", f"Stembox-{ver}-arm64.dmg")
+    os.makedirs(os.path.dirname(dmg), exist_ok=True)
+
+    if not os.path.isfile(dmg):
+        print(f"-- downloading {url}")
+        subprocess.run(["curl", "-fL", "-o", dmg, url], check=True)
+    print(f"   dmg: {os.path.name(dmg)} ({os.path.getsize(dmg)} bytes)")
+
+    print("-- mounting dmg")
+    mount = subprocess.run(
+        ["hdiutil", "attach", dmg, "-nobrowse", "-readonly"],
+        capture_output=True, text=True)
+    vol = None
+    for line in mount.stdout.splitlines():
+        if line.strip().startswith("/Volumes/"):
+            vol = line.strip()
+    if not vol:
+        # license agreement may block a non-tty attach
+        print("   (license prompt?) retrying with `yes |`")
+        subprocess.run("yes | hdiutil attach '%s' -nobrowse -readonly" % dmg,
+                       shell=True, check=False, capture_output=True)
+        for cand in os.listdir("/Volumes"):
+            if cand.startswith("Stembox"):
+                vol = os.path.join("/Volumes", cand)
+    if not vol or not os.path.isdir(vol):
+        print("could not mount dmg", file=sys.stderr)
+        return 1
+    src_app = os.path.join(vol, "Stembox.app")
+    if not os.path.isdir(src_app):
+        print(f"Stembox.app not found in {vol}", file=sys.stderr)
+        subprocess.run(["hdiutil", "detach", vol], check=False)
+        return 1
+
+    try:
+        print("-- copying vendor app -> build/app-pristine")
+        if os.path.isdir(APP_PRISTINE):
+            shutil.rmtree(APP_PRISTINE)
+        shutil.copytree(src_app, APP_PRISTINE, symlinks=True)
+    finally:
+        subprocess.run(["hdiutil", "detach", vol], check=False)
+
+    if not os.path.isfile(KEY_FILE) or args.force_keys:
+        print("-- generating keypair")
+        cmd_keys(argparse.Namespace(force=args.force_keys, patch_now=False))
+    else:
+        print(f"-- reusing keypair {KEY_FILE}")
+
+    print("-- copying pristine -> app-patched")
+    if os.path.isdir(APP_PATCHED):
+        shutil.rmtree(APP_PATCHED)
+    shutil.copytree(APP_PRISTINE, APP_PATCHED, symlinks=True)
+
+    keys = load_keys()
+    rc = patch_binary(os.path.join(APP_PATCHED, BIN_REL), keys["pub_spki_b64"], False)
+    if rc != 0:
+        return rc
+    subprocess.run(["codesign", "--force", "--sign", "-",
+                    os.path.join(APP_PATCHED, BIN_REL)], check=True)
+    print("-- ad-hoc signed (no --options runtime)")
+    return cmd_install_app(args)
+
+
 def cmd_status(args) -> int:
     keys = load_keys() if os.path.isfile(KEY_FILE) else None
     if keys:
@@ -363,6 +438,18 @@ def main(argv=None) -> int:
     a.add_argument("--no-token", action="store_true",
                    help="skip token installation")
     a.set_defaults(fn=cmd_install_app)
+
+    b = sub.add_parser("bootstrap",
+                       help="fresh-machine setup: download official app, "
+                            "keys, patch, sign, deploy, token")
+    b.add_argument("--version", default="2.0.0", help="vendor version to fetch")
+    b.add_argument("--force-keys", action="store_true",
+                   help="regenerate the keypair even if one exists")
+    b.add_argument("--tier", default="lifetime")
+    b.add_argument("--device", default=None)
+    b.add_argument("--exp-days", type=int, default=36500)
+    b.add_argument("--no-token", action="store_true")
+    b.set_defaults(fn=cmd_bootstrap)
 
     s = sub.add_parser("status", help="show patch/key/app state")
     s.set_defaults(fn=cmd_status)
