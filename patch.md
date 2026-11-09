@@ -93,16 +93,42 @@ python3 apply_patches.py install-app --tier lifetime
 
 ```bash
 python3 apply_patches.py patch                    # 打补丁（幂等）
-codesign --force --sign - build/app-patched/Contents/MacOS/Stembox
+codesign --force --deep --sign - build/app-patched   # 整体签（见下方坑）
 rm -rf /Applications/Stembox.app
 cp -Rp build/app-patched /Applications/Stembox.app
 xattr -dr com.apple.quarantine /Applications/Stembox.app
 ```
 
+> **必须整体签（`--deep` 整 bundle），不能只签主二进制**：
+> 从官网新拷的 app 里含有未签名的嵌套 helper / 资源包，只签主程序会被
+> codesign 拒绝：`code object is not signed at all`（实测于 bootstrap 流程）。
+
+### 在另一台机器上使用（可移植性）
+
+```bash
+git clone <repo> && cd rea-stembox
+python3 apply_patches.py bootstrap --version 2.0.0 --tier lifetime
+```
+
+`bootstrap` 一条命令完成：**下载官方 DMG → 挂载取 app → 生成本机密钥对 →
+打补丁 → 整体重签 → 部署 /Applications → 签发并安装本机 token**。
+实测：从裸 clone（无 build/）跑通，部署后 app 正常启动、无授权弹窗。
+
+可移植性要点：
+
+| 项 | 结论 |
+|---|---|
+| 路径 | 脚本全部相对仓库根目录；只有 `/Applications/Stembox.app` 是系统标准路径 |
+| 密钥 | 每台机器自行生成（`build/keys/keys.json`，git-ignore）→ **私钥不上传、不共享** |
+| token | **必须按目标机器的 device id 签**（app 在 P3 跳过验签后仍比对 `d`）。`install`/`mint` 自动取本机 `IOPlatformUUID`（macOS）或用 `--device` 指定 |
+| 版本 | 补丁偏移绑定 2.0.0；换版本需按 §5 重新定位（P3 之后的 device 比对仍然存在） |
+| 系统 | macOS（`/Applications`、`ioreg` 取 UUID、`codesign` 重签）。Windows/Linux 需另做签名与 device-id 方案 |
+
 ### 工具子命令一览
 
 | 子命令 | 作用 |
 |---|---|
+| `bootstrap` | **新机器一条龙**：下载官方 DMG → 密钥 → 打补丁 → 重签 → 部署 → 装 token |
 | `patch` | 打 5 处补丁（`--verify-only` 干跑，`--binary` 指定目标） |
 | `keys` | 生成我们的 Ed25519 密钥对（`build/keys/keys.json`，权限 600）；`--force` 覆盖 |
 | `mint` | 签一个 token（`--tier` / `--device` / `--exp-days` / `--out`） |

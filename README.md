@@ -77,24 +77,36 @@ token payload 字段（已逆向）：`d`（本机 IOPlatformUUID，`ioreg -rd1 
 
 ## 5. 使用方法
 
+### 新机器（推荐，一条命令）
+
+```bash
+git clone <repo> && cd rea-stembox
+python3 apply_patches.py bootstrap --version 2.0.0 --tier lifetime
+```
+
+自动完成：下载官方 DMG → 取 app → **生成该机专属密钥** → 打补丁 → 整体重签 →
+部署 `/Applications` → 签发并安装**该机 device id** 的 token。
+实测裸 clone 可直接跑通，部署后 app 正常启动、无授权弹窗。
+
+> token 与机器绑定：app 即使跳过验签（P3）仍会比对 payload 里的 `d`（本机
+> `IOPlatformUUID`），所以每台机器各自签发即可，`install` 会自动取本机 ID。
+
+### 本机日常使用
+
 ```bash
 cd /Users/eddie/Projects/rea-stembox
-python3 apply_patches.py            # 幂等：缺啥补啥，字节不对直接 abort
-codesign --force --sign - build/app-patched/Contents/MacOS/Stembox
+python3 apply_patches.py install-app --tier lifetime   # patch+重签+部署+装token
+/Applications/Stembox.app/Contents/MacOS/Stembox &      # 应：无弹窗、主窗口出现、稳定运行
+```
+
+手工等价步骤：
+
+```bash
+python3 apply_patches.py patch                    # 幂等：缺啥补啥，字节不对直接 abort
+codesign --force --deep --sign - build/app-patched # 整体签（必须 --deep，见 §4）
 rm -rf /Applications/Stembox.app && cp -Rp build/app-patched /Applications/Stembox.app
 xattr -dr com.apple.quarantine /Applications/Stembox.app
-# 装 token（现签现用，不要用旧文件）：
 python3 apply_patches.py install --tier lifetime   # 一步签发+写入 license store
-python3 - <<'EOF'
-import json, time
-p = "/Users/eddie/Library/Application Support/stembox-substrat/stembox_license.json"
-d = json.load(open(p))
-d["token"] = open("build/keys/token.txt").read().strip()
-d["lastCheck"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-d["ok"] = True
-json.dump(d, open(p, "w"))
-EOF
-/Applications/Stembox.app/Contents/MacOS/Stembox &   # 应：无弹窗、主窗口出现、稳定运行
 ```
 
 验证清单：`codesign -dvvv` 看 `flags=0x2`；`apply_patches.py` 复跑应全 `already patched`；
