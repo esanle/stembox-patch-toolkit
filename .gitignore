@@ -20,8 +20,9 @@
 #   build/venv/          python -m venv build/venv
 # ─────────────────────────────────────────────────────────────────────────────
 
-# the independent ostem reimplementation project (tracked elsewhere)
-source/
+# NOTE: source/ is a git SUBMODULE (the ostem project) — do not ignore it here.
+#   .gitmodules -> source = https://github.com/esanle/ostem.git
+# Clone with:  git clone --recurse-submodules <this repo>
 
 # build tree (intermediates, incl. the private key)
 build/

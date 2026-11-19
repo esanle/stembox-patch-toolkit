@@ -21,8 +21,9 @@ rea-stembox/                ← 本仓库：仅补丁工具链
     ├── cmake/           cmake -S source -B build/cmake
     └── venv/            python -m venv build/venv
 
-source/                   ← 独立项目（开源重实现 ostem），已 git-ignore，
-                            单独版本管理，不属于本仓库
+source/                   ← 【git submodule】开源重实现 ostem
+                            https://github.com/esanle/ostem.git
+                            （独立仓库、独立版本，克隆时需 --recurse-submodules）
 ```
 
 `build/` 里的东西都可重建：pristine 从官网 DMG 重下，patched 由 `apply_patches.py patch` 生成，
@@ -80,7 +81,8 @@ token payload 字段（已逆向）：`d`（本机 IOPlatformUUID，`ioreg -rd1 
 ### 新机器（推荐，一条命令）
 
 ```bash
-git clone <repo> && cd rea-stembox
+git clone --recurse-submodules <repo> && cd rea-stembox
+# 已经 clone 过但没有子模块的：git submodule update --init --recursive
 python3 apply_patches.py bootstrap --version 2.0.0 --tier lifetime
 ```
 
